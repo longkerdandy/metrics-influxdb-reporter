@@ -1,0 +1,23 @@
+language: java
+jdk:
+  - oraclejdk8
+before_install:
+  - wget http://influxdb.s3.amazonaws.com/influxdb_0.9.5_amd64.deb
+  - sudo dpkg -i influxdb_0.9.5_amd64.deb
+  - sudo service influxdb start
+  - sleep 10
+  - chmod +x gradlew
+before_cache:
+  - rm -f $HOME/.gradle/caches/modules-2/modules-2.lock
+cache:
+  directories:
+    - $HOME/.gradle/caches/
+    - $HOME/.gradle/wrapper/
+notifications:
+  webhooks:
+    urls:
+      - https://webhooks.gitter.im/e/3ed37787c24f3af56d10
+    on_success: change  # options: [always|never|change] default: always
+    on_failure: always  # options: [always|never|change] default: always
+    on_start: never     # options: [always|never|change] default: always
+
