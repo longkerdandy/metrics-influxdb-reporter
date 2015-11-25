@@ -21,13 +21,10 @@ repositories {
 // Dependencies
 dependencies {
     // metrics
-    compile 'io.dropwizard.metrics:metrics-core:3.1.0'
+    compile 'io.dropwizard.metrics:metrics-core:3.1.2'
 
     // influxdb
     compile 'org.influxdb:influxdb-java:2.0'
-
-    // logger
-    compile 'org.slf4j:slf4j-api:1.7.12'
 
     // junit
     testCompile 'junit:junit:4.12'
