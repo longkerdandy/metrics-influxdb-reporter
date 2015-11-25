@@ -1,11 +1,11 @@
-sudo: false
+sudo: required
 language: java
 jdk:
   - oraclejdk8
 before_install:
   - wget http://influxdb.s3.amazonaws.com/influxdb_0.9.5_amd64.deb
-  - dpkg -i influxdb_0.9.5_amd64.deb
-  - service influxdb start
+  - sudo dpkg -i influxdb_0.9.5_amd64.deb
+  - sudo service influxdb start
   - sleep 10
   - chmod +x gradlew
 before_cache:
