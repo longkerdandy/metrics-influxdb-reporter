@@ -64,10 +64,10 @@ reporter.start(10, TimeUnit.SECONDS);
 ##### Build with Gradle Wrapper
 Build with tests:
 ```
-    gradlew clean build
+>       gradlew clean build
 ```
 
 Build only, skip tests:
 ```
-    gradlew clean build -x test
+>       gradlew clean build -x test
 ```
