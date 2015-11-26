@@ -1,6 +1,8 @@
 package com.github.longkerdandy.metrics.influxdb.reporter;
 
 import com.codahale.metrics.*;
+import org.influxdb.InfluxDB;
+import org.influxdb.InfluxDBFactory;
 import org.influxdb.dto.Query;
 import org.influxdb.dto.QueryResult;
 import org.junit.AfterClass;
@@ -18,20 +20,20 @@ public class InfluxDBReporterTest {
     private final static String IP = "127.0.0.1";
     private final static long INTERVAL = 5000;
 
-    private static MetricRegistry metrics = new MetricRegistry();
+    private static InfluxDB influxDB;
     private static InfluxDBReporter reporter;
 
     @BeforeClass
     public static void init() {
-        reporter = InfluxDBReporter.forRegistry(metrics)
-                .dbUrl("http://" + IP + ":8086")
+        influxDB = InfluxDBFactory.connect("http://" + IP + ":8086", "root", "root");
+        reporter = new InfluxDBReporter.Builder(influxDB, new MetricRegistry())
                 .dbName("metrics_test")
                 .build();
     }
 
     @AfterClass
     public static void destroy() {
-        reporter.influxDB.deleteDatabase("metrics_test");
+        influxDB.deleteDatabase("metrics_test");
     }
 
     @Test
@@ -48,14 +50,14 @@ public class InfluxDBReporterTest {
         Thread.sleep(INTERVAL);
 
         Query query = new Query("SELECT * FROM \"metrics.test.gauges.g1\"", "metrics_test");
-        QueryResult result = reporter.influxDB.query(query);
+        QueryResult result = influxDB.query(query);
         assert result.getResults().size() == 1;
         assert result.getResults().get(0).getSeries().get(0).getValues().size() == 2;
         assert (Double) result.getResults().get(0).getSeries().get(0).getValues().get(0).get(1) == 100;
         assert (Double) result.getResults().get(0).getSeries().get(0).getValues().get(1).get(1) == 50;
 
         query = new Query("SELECT * FROM \"metrics.test.gauges.g2\"", "metrics_test");
-        result = reporter.influxDB.query(query);
+        result = influxDB.query(query);
         assert result.getResults().size() == 1;
         assert result.getResults().get(0).getSeries().get(0).getValues().size() == 2;
         assert (Double) result.getResults().get(0).getSeries().get(0).getValues().get(0).get(1) == 200;
@@ -80,14 +82,14 @@ public class InfluxDBReporterTest {
         Thread.sleep(INTERVAL);
 
         Query query = new Query("SELECT * FROM \"metrics.test.counters.c1\"", "metrics_test");
-        QueryResult result = reporter.influxDB.query(query);
+        QueryResult result = influxDB.query(query);
         assert result.getResults().size() == 1;
         assert result.getResults().get(0).getSeries().get(0).getValues().size() == 2;
         assert (Double) result.getResults().get(0).getSeries().get(0).getValues().get(0).get(1) == 100;
         assert (Double) result.getResults().get(0).getSeries().get(0).getValues().get(1).get(1) == 50;
 
         query = new Query("SELECT * FROM \"metrics.test.counters.c2\"", "metrics_test");
-        result = reporter.influxDB.query(query);
+        result = influxDB.query(query);
         assert result.getResults().size() == 1;
         assert result.getResults().get(0).getSeries().get(0).getValues().size() == 2;
         assert (Double) result.getResults().get(0).getSeries().get(0).getValues().get(0).get(1) == 200;
@@ -112,7 +114,7 @@ public class InfluxDBReporterTest {
         Thread.sleep(INTERVAL);
 
         Query query = new Query("SELECT * FROM \"metrics.test.histograms.h1\"", "metrics_test");
-        QueryResult result = reporter.influxDB.query(query);
+        QueryResult result = influxDB.query(query);
         assert result.getResults().size() == 1;
         assert result.getResults().get(0).getSeries().get(0).getValues().size() == 2;
         assert (Double) result.getResults().get(0).getSeries().get(0).getValues().get(0).get(3) == 75;
@@ -137,7 +139,7 @@ public class InfluxDBReporterTest {
         Thread.sleep(INTERVAL);
 
         Query query = new Query("SELECT * FROM \"metrics.test.meters.m1\"", "metrics_test");
-        QueryResult result = reporter.influxDB.query(query);
+        QueryResult result = influxDB.query(query);
         assert result.getResults().size() == 1;
         assert result.getResults().get(0).getSeries().get(0).getValues().size() == 2;
         assert (Double) result.getResults().get(0).getSeries().get(0).getValues().get(0).get(1) == 150;
@@ -170,7 +172,7 @@ public class InfluxDBReporterTest {
         Thread.sleep(INTERVAL);
 
         Query query = new Query("SELECT * FROM \"metrics.test.timers.t1\"", "metrics_test");
-        QueryResult result = reporter.influxDB.query(query);
+        QueryResult result = influxDB.query(query);
         assert result.getResults().size() == 1;
         assert result.getResults().get(0).getSeries().get(0).getValues().size() == 2;
         assert (Double) result.getResults().get(0).getSeries().get(0).getValues().get(0).get(1) == 2;

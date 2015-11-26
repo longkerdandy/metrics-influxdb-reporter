@@ -5,10 +5,11 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Ordering;
 import org.influxdb.InfluxDB;
 import org.influxdb.InfluxDB.ConsistencyLevel;
-import org.influxdb.InfluxDBFactory;
 import org.influxdb.dto.BatchPoints;
 import org.influxdb.dto.Point;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.SortedMap;
 import java.util.concurrent.TimeUnit;
@@ -19,68 +20,83 @@ import java.util.concurrent.TimeUnit;
 @SuppressWarnings("unused")
 public class InfluxDBReporter extends ScheduledReporter {
 
-    protected final InfluxDB influxDB;
-    protected final String dbName;
-    protected final Map<String, String> tags;
-    protected final Clock clock;
+    private final InfluxDB influxDB;
+    private final String dbName;
+    private final Map<String, String> dbTags;
+    private final boolean dbBatch;
+    private final Clock clock;
 
-    protected InfluxDBReporter(String url, String username, String password, String dbName, Map<String, String> tags,
+    protected InfluxDBReporter(InfluxDB influxDB, String dbName, Map<String, String> dbTags, boolean dbBatch,
                                Clock clock, MetricRegistry registry, MetricFilter filter, TimeUnit rateUnit, TimeUnit durationUnit) {
         super(registry, "influxdb-reporter", filter, rateUnit, durationUnit);
-        this.influxDB = InfluxDBFactory.connect(url, username, password);
-        this.influxDB.createDatabase(dbName);
+        this.influxDB = influxDB;
         this.dbName = dbName;
-        this.tags = tags;
+        this.dbTags = dbTags;
+        this.dbBatch = dbBatch;
         this.clock = clock;
-    }
-
-    /**
-     * Returns a new {@link Builder} for {@link InfluxDBReporter}.
-     *
-     * @param registry the registry to report
-     * @return a {@link Builder} instance for a {@link InfluxDBReporter}
-     */
-    public static Builder forRegistry(MetricRegistry registry) {
-        return new Builder(registry);
     }
 
     @Override
     public void report(SortedMap<String, Gauge> gauges, SortedMap<String, Counter> counters, SortedMap<String, Histogram> histograms, SortedMap<String, Meter> meters, SortedMap<String, Timer> timers) {
         long timestamp = this.clock.getTime();
-        BatchPoints batchPoints = batchPoints();
-        if (gauges != null) addGauges(batchPoints, gauges, timestamp);
-        if (counters != null) addCounters(batchPoints, counters, timestamp);
-        if (histograms != null) addHistograms(batchPoints, histograms, timestamp);
-        if (meters != null) addMeters(batchPoints, meters, timestamp);
-        if (timers != null) addTimers(batchPoints, timers, timestamp);
-        this.influxDB.write(batchPoints);
+        List<Point> gaugePoints = getGaugePoints(gauges, timestamp);
+        List<Point> counterPoints = getCounterPoints(counters, timestamp);
+        List<Point> histogramPoints = getHistogramPoints(histograms, timestamp);
+        List<Point> meterPoints = getMeterPoints(meters, timestamp);
+        List<Point> timerPoints = getTimerPoints(timers, timestamp);
+        if (this.dbBatch) {
+            BatchPoints batchPoints = BatchPoints.database(this.dbName)
+                    .retentionPolicy("default")
+                    .consistency(ConsistencyLevel.ALL)
+                    .build();
+            gaugePoints.forEach(batchPoints::point);
+            counterPoints.forEach(batchPoints::point);
+            histogramPoints.forEach(batchPoints::point);
+            meterPoints.forEach(batchPoints::point);
+            timerPoints.forEach(batchPoints::point);
+            this.influxDB.write(batchPoints);
+        } else {
+            gaugePoints.forEach(point -> this.influxDB.write(this.dbName, "default", point));
+            counterPoints.forEach(point -> this.influxDB.write(this.dbName, "default", point));
+            histogramPoints.forEach(point -> this.influxDB.write(this.dbName, "default", point));
+            meterPoints.forEach(point -> this.influxDB.write(this.dbName, "default", point));
+            timerPoints.forEach(point -> this.influxDB.write(this.dbName, "default", point));
+        }
     }
 
-    protected void addGauges(BatchPoints batchPoints, SortedMap<String, Gauge> gauges, long timestamp) {
+    protected List<Point> getGaugePoints(SortedMap<String, Gauge> gauges, long timestamp) {
+        List<Point> points = new ArrayList<>();
         gauges.forEach((name, gauge) -> {
             Point point = Point.measurement(name)
                     .time(timestamp, TimeUnit.MILLISECONDS)
+                    .tag(this.dbTags)
                     .field("value", gauge.getValue())
                     .build();
-            batchPoints.point(point);
+            points.add(point);
         });
+        return points;
     }
 
-    protected void addCounters(BatchPoints batchPoints, SortedMap<String, Counter> counters, long timestamp) {
+    protected List<Point> getCounterPoints(SortedMap<String, Counter> counters, long timestamp) {
+        List<Point> points = new ArrayList<>();
         counters.forEach((name, counter) -> {
             Point point = Point.measurement(name)
                     .time(timestamp, TimeUnit.MILLISECONDS)
+                    .tag(this.dbTags)
                     .field("count", counter.getCount())
                     .build();
-            batchPoints.point(point);
+            points.add(point);
         });
+        return points;
     }
 
-    protected void addHistograms(BatchPoints batchPoints, SortedMap<String, Histogram> histograms, long timestamp) {
+    protected List<Point> getHistogramPoints(SortedMap<String, Histogram> histograms, long timestamp) {
+        List<Point> points = new ArrayList<>();
         histograms.forEach((name, histogram) -> {
             Snapshot snapshot = histogram.getSnapshot();
             Point point = Point.measurement(name)
                     .time(timestamp, TimeUnit.MILLISECONDS)
+                    .tag(this.dbTags)
                     .field("count", histogram.getCount())
                     .field("size", snapshot.size())
                     .field("max", snapshot.getMax())
@@ -94,29 +110,35 @@ public class InfluxDBReporter extends ScheduledReporter {
                     .field("p99", snapshot.get99thPercentile())
                     .field("p999", snapshot.get999thPercentile())
                     .build();
-            batchPoints.point(point);
+            points.add(point);
         });
+        return points;
     }
 
-    protected void addMeters(BatchPoints batchPoints, SortedMap<String, Meter> meters, long timestamp) {
+    protected List<Point> getMeterPoints(SortedMap<String, Meter> meters, long timestamp) {
+        List<Point> points = new ArrayList<>();
         meters.forEach((name, meter) -> {
             Point point = Point.measurement(name)
                     .time(timestamp, TimeUnit.MILLISECONDS)
+                    .tag(this.dbTags)
                     .field("count", meter.getCount())
                     .field("m1_rate", convertRate(meter.getOneMinuteRate()))
                     .field("m5_rate", convertRate(meter.getFiveMinuteRate()))
                     .field("m15_rate", convertRate(meter.getFifteenMinuteRate()))
                     .field("mean_rate", convertRate(meter.getMeanRate()))
                     .build();
-            batchPoints.point(point);
+            points.add(point);
         });
+        return points;
     }
 
-    protected void addTimers(BatchPoints batchPoints, SortedMap<String, Timer> timers, long timestamp) {
+    protected List<Point> getTimerPoints(SortedMap<String, Timer> timers, long timestamp) {
+        List<Point> points = new ArrayList<>();
         timers.forEach((name, timer) -> {
             Snapshot snapshot = timer.getSnapshot();
             Point point = Point.measurement(name)
                     .time(timestamp, TimeUnit.MILLISECONDS)
+                    .tag(this.dbTags)
                     .field("count", timer.getCount())
                     .field("m1_rate", convertRate(timer.getOneMinuteRate()))
                     .field("m5_rate", convertRate(timer.getFiveMinuteRate()))
@@ -134,48 +156,37 @@ public class InfluxDBReporter extends ScheduledReporter {
                     .field("p99", convertDuration(snapshot.get99thPercentile()))
                     .field("p999", convertDuration(snapshot.get999thPercentile()))
                     .build();
-            batchPoints.point(point);
+            points.add(point);
         });
-    }
-
-    protected BatchPoints batchPoints() {
-        BatchPoints.Builder builder = BatchPoints.database(this.dbName)
-                .retentionPolicy("default")
-                .consistency(ConsistencyLevel.ALL);
-        for (Map.Entry<String, String> tag : this.tags.entrySet()) {
-            builder = builder.tag(tag.getKey(), tag.getValue());
-        }
-        return builder.build();
+        return points;
     }
 
     /**
      * A builder for {@link InfluxDBReporter} instances. Defaults using the default clock,
      * converting rates to events/second, converting durations to milliseconds, and not filtering metrics.
-     * Connect to local InfluxDB database 'metrics' with default user name and password
+     * Connect to specific InfluxDB with database name 'metrics' in batch mode.
      */
     public static class Builder {
+        private final InfluxDB influxDB;
+        private String dbName;
+        private Map<String, String> dbTags;
+        private boolean dbBatch;
         private final MetricRegistry registry;
         private Clock clock;
         private MetricFilter filter;
         private TimeUnit rateUnit;
         private TimeUnit durationUnit;
-        private String url;
-        private String username;
-        private String password;
-        private String dbName;
-        private Map<String, String> tags;
 
-        private Builder(MetricRegistry registry) {
+        public Builder(InfluxDB influxDB, MetricRegistry registry) {
+            this.influxDB = influxDB;
+            this.dbName = "metrics";
+            this.dbTags = Maps.newTreeMap(Ordering.natural());
+            this.dbBatch = true;
             this.registry = registry;
             this.clock = Clock.defaultClock();
+            this.filter = MetricFilter.ALL;
             this.rateUnit = TimeUnit.SECONDS;
             this.durationUnit = TimeUnit.MILLISECONDS;
-            this.filter = MetricFilter.ALL;
-            this.url = "http://127.0.0.1:8086";
-            this.username = "root";
-            this.password = "root";
-            this.dbName = "metrics";
-            this.tags = Maps.newTreeMap(Ordering.natural());
         }
 
         /**
@@ -223,39 +234,6 @@ public class InfluxDBReporter extends ScheduledReporter {
         }
 
         /**
-         * InfluxDB url
-         *
-         * @param url InfluxDB url
-         * @return {@code this}
-         */
-        public Builder dbUrl(String url) {
-            this.url = url;
-            return this;
-        }
-
-        /**
-         * InfluxDB user name
-         *
-         * @param username InfluxDB user name
-         * @return {@code this}
-         */
-        public Builder dbUsername(String username) {
-            this.username = username;
-            return this;
-        }
-
-        /**
-         * InfluxDB password
-         *
-         * @param password InfluxDB password
-         * @return {@code this}
-         */
-        public Builder dbPassword(String password) {
-            this.password = password;
-            return this;
-        }
-
-        /**
          * InfluxDB database name
          *
          * @param dbName InfluxDB database name
@@ -269,11 +247,22 @@ public class InfluxDBReporter extends ScheduledReporter {
         /**
          * InfluxDB optional tags
          *
-         * @param tags InfluxDB optional tags
+         * @param tags InfluxDB optional dbTags
          * @return {@code this}
          */
         public Builder dbTags(Map<String, String> tags) {
-            this.tags = tags;
+            if (tags != null) this.dbTags.putAll(tags);
+            return this;
+        }
+
+        /**
+         * InfluxDB use batch mode
+         *
+         * @param dbBatch use batch mode
+         * @return {@code this}
+         */
+        public Builder dbBatch(boolean dbBatch) {
+            this.dbBatch = dbBatch;
             return this;
         }
 
@@ -283,7 +272,7 @@ public class InfluxDBReporter extends ScheduledReporter {
          * @return a {@link InfluxDBReporter}
          */
         public InfluxDBReporter build() {
-            return new InfluxDBReporter(url, username, password, dbName, tags,
+            return new InfluxDBReporter(influxDB, dbName, dbTags, dbBatch,
                     clock, registry, filter, rateUnit, durationUnit
             );
         }
