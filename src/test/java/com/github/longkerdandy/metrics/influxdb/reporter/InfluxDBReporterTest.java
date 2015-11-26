@@ -18,7 +18,7 @@ import java.util.TreeMap;
 public class InfluxDBReporterTest {
 
     private final static String IP = "127.0.0.1";
-    private final static long INTERVAL = 5000;
+    private final static long INTERVAL = 1000;
 
     private static InfluxDB influxDB;
     private static InfluxDBReporter reporter;
@@ -26,6 +26,7 @@ public class InfluxDBReporterTest {
     @BeforeClass
     public static void init() {
         influxDB = InfluxDBFactory.connect("http://" + IP + ":8086", "root", "root");
+        influxDB.createDatabase("metrics_test");
         reporter = new InfluxDBReporter.Builder(influxDB, new MetricRegistry())
                 .dbName("metrics_test")
                 .build();
