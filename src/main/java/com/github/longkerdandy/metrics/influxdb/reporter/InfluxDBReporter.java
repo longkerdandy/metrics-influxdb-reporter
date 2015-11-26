@@ -66,7 +66,7 @@ public class InfluxDBReporter extends ScheduledReporter {
 
     protected List<Point> getGaugePoints(SortedMap<String, Gauge> gauges, long timestamp) {
         List<Point> points = new ArrayList<>();
-        gauges.forEach((name, gauge) -> {
+        if (gauges != null) gauges.forEach((name, gauge) -> {
             Point point = Point.measurement(name)
                     .time(timestamp, TimeUnit.MILLISECONDS)
                     .tag(this.dbTags)
@@ -79,7 +79,7 @@ public class InfluxDBReporter extends ScheduledReporter {
 
     protected List<Point> getCounterPoints(SortedMap<String, Counter> counters, long timestamp) {
         List<Point> points = new ArrayList<>();
-        counters.forEach((name, counter) -> {
+        if (counters != null) counters.forEach((name, counter) -> {
             Point point = Point.measurement(name)
                     .time(timestamp, TimeUnit.MILLISECONDS)
                     .tag(this.dbTags)
@@ -92,7 +92,7 @@ public class InfluxDBReporter extends ScheduledReporter {
 
     protected List<Point> getHistogramPoints(SortedMap<String, Histogram> histograms, long timestamp) {
         List<Point> points = new ArrayList<>();
-        histograms.forEach((name, histogram) -> {
+        if (histograms != null) histograms.forEach((name, histogram) -> {
             Snapshot snapshot = histogram.getSnapshot();
             Point point = Point.measurement(name)
                     .time(timestamp, TimeUnit.MILLISECONDS)
@@ -117,7 +117,7 @@ public class InfluxDBReporter extends ScheduledReporter {
 
     protected List<Point> getMeterPoints(SortedMap<String, Meter> meters, long timestamp) {
         List<Point> points = new ArrayList<>();
-        meters.forEach((name, meter) -> {
+        if (meters != null) meters.forEach((name, meter) -> {
             Point point = Point.measurement(name)
                     .time(timestamp, TimeUnit.MILLISECONDS)
                     .tag(this.dbTags)
@@ -134,7 +134,7 @@ public class InfluxDBReporter extends ScheduledReporter {
 
     protected List<Point> getTimerPoints(SortedMap<String, Timer> timers, long timestamp) {
         List<Point> points = new ArrayList<>();
-        timers.forEach((name, timer) -> {
+        if (timers != null) timers.forEach((name, timer) -> {
             Snapshot snapshot = timer.getSnapshot();
             Point point = Point.measurement(name)
                     .time(timestamp, TimeUnit.MILLISECONDS)
